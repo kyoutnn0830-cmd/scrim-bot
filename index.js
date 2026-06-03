@@ -178,39 +178,13 @@ client.on('interactionCreate', async interaction => {
                 });
             }
 
-            // チーム用VCを作成（エントリーした2人だけが見える・入れる）
-            let vcChannel = null;
-            try {
-                vcChannel = await interaction.guild.channels.create({
-                    name: `🏷️ ${team}`,
-                    type: ChannelType.GuildVoice,
-                    parent: process.env.VC_CATEGORY_ID ?? null,
-                    permissionOverwrites: [
-                        {
-                            id: interaction.guild.roles.everyone.id,
-                            deny: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect]
-                        },
-                        {
-                            id: member1.id,
-                            allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect]
-                        },
-                        {
-                            id: member2.id,
-                            allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect]
-                        }
-                    ]
-                });
-            } catch (e) {
-                console.error('エントリーVC作成失敗:', e.message);
-            }
-
             // submitter = エントリーを送信した人（キャンセル権限の管理用）
             entries.push({
                 team,
                 submitter: interaction.user.id,
                 member1: member1.id,
                 member2: member2.id,
-                vcChannelId: vcChannel?.id ?? null
+                vcChannelId: null
             });
 
             await Promise.all([
@@ -225,7 +199,6 @@ client.on('interactionCreate', async interaction => {
 🏷️ チーム名: ${team}
 👤 メンバー①: <@${member1.id}>
 👤 メンバー②: <@${member2.id}>
-${vcChannel ? `\n🔊 チームVC: <#${vcChannel.id}>` : ''}
 🎭 参加者ロール付与済み
 🕒 締切: ${ENTRY_DEADLINE}`
             });
