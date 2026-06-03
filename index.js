@@ -15,6 +15,8 @@ const TOKEN = process.env.BOT_TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 const ENTRY_ROLE_ID = process.env.ENTRY_ROLE_ID;
+// エントリーに必須のロール（メンバー①②が両方持っている必要がある）
+const REQUIRED_ROLE_ID = process.env.REQUIRED_ROLE_ID || '1444402009058054144';
 
 const ENTRY_DEADLINE = "22:00";
 const ENTRY_LIMIT = 100; // エントリー人数上限（メンバー①+メンバー②=2人/チーム）
@@ -69,6 +71,17 @@ async function getRole(guild) {
     if (!ENTRY_ROLE_ID) return null;
     return guild.roles.cache.get(ENTRY_ROLE_ID)
         ?? await guild.roles.fetch(ENTRY_ROLE_ID);
+}
+
+async function hasRequiredRole(guild, userId) {
+    if (!REQUIRED_ROLE_ID) return true;
+    try {
+        const member = await guild.members.fetch(userId);
+        return member.roles.cache.has(REQUIRED_ROLE_ID);
+    } catch (e) {
+        console.error(`ロール確認失敗 (${userId}):`, e.message);
+        return false;
+    }
 }
 
 async function addRoleToUser(guild, userId) {
@@ -134,6 +147,21 @@ client.on('interactionCreate', async interaction => {
             if (member1.id === member2.id) {
                 return await interaction.reply({
                     content: 'メンバー①とメンバー②は別の人を指定してください',
+                    ephemeral: true
+                });
+            }
+
+            // メンバー①②が両方とも必須ロールを持っているかチェック
+            const [m1HasRole, m2HasRole] = await Promise.all([
+                hasRequiredRole(interaction.guild, member1.id),
+                hasRequiredRole(interaction.guild, member2.id)
+            ]);
+            if (!m1HasRole || !m2HasRole) {
+                const missing = [];
+                if (!m1HasRole) missing.push(`<@${member1.id}>`);
+                if (!m2HasRole) missing.push(`<@${member2.id}>`);
+                return await interaction.reply({
+                    content: `⛔ エントリーには必須ロール <@&${REQUIRED_ROLE_ID}> が必要です\nロール未所持: ${missing.join(' ')}`,
                     ephemeral: true
                 });
             }
