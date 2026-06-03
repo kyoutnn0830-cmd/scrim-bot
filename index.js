@@ -8,6 +8,8 @@ const {
     ChannelType,
     PermissionFlagsBits
 } = require('discord.js');
+const fs = require('fs');
+const path = require('path');
 
 const TOKEN = process.env.BOT_TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
@@ -24,7 +26,30 @@ const client = new Client({
     ]
 });
 
-const entries = [];
+// エントリー情報の永続化（再起動後も保持）
+const DATA_DIR = process.env.DATA_DIR || __dirname;
+const DATA_FILE = path.join(DATA_DIR, 'entries.json');
+
+function loadEntries() {
+    try {
+        if (fs.existsSync(DATA_FILE)) {
+            return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+        }
+    } catch (e) {
+        console.error('エントリー読込失敗:', e.message);
+    }
+    return [];
+}
+
+function saveEntries() {
+    try {
+        fs.writeFileSync(DATA_FILE, JSON.stringify(entries, null, 2));
+    } catch (e) {
+        console.error('エントリー保存失敗:', e.message);
+    }
+}
+
+const entries = loadEntries();
 
 // =====================
 // ユーティリティ
@@ -129,6 +154,7 @@ client.on('interactionCreate', async interaction => {
                 member2: member2.id,
                 vcChannelId: null
             });
+            saveEntries();
 
             await Promise.all([
                 addRoleToUser(interaction.guild, member1.id),
@@ -182,6 +208,7 @@ client.on('interactionCreate', async interaction => {
             }
 
             const cancelled = entries.splice(index, 1)[0];
+            saveEntries();
             await Promise.all([
                 removeRoleFromUser(interaction.guild, cancelled.member1),
                 removeRoleFromUser(interaction.guild, cancelled.member2)
