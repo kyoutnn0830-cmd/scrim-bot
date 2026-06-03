@@ -227,6 +227,95 @@ client.on('interactionCreate', async interaction => {
             await interaction.reply('❌ エントリー削除 & ロール解除 & VC削除完了');
         }
 
+        // 代理エントリー（管理者のみ）
+        else if (interaction.commandName === 'add') {
+            if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+                return await interaction.reply({
+                    content: '⛔ このコマンドは管理者のみ使用できます',
+                    ephemeral: true
+                });
+            }
+
+            const currentCount = entries.length * 2;
+            if (currentCount + 2 > ENTRY_LIMIT) {
+                return await interaction.reply({
+                    content: `⛔ エントリー上限（${ENTRY_LIMIT}人）に達しました\n現在: ${currentCount}人 / ${ENTRY_LIMIT}人`,
+                    ephemeral: true
+                });
+            }
+
+            const team = interaction.options.getString('team');
+            const member1 = interaction.options.getUser('member1');
+            const member2 = interaction.options.getUser('member2');
+
+            // すでにエントリー済みのメンバーが含まれていないかチェック
+            const already = entries.find(e =>
+                e.member1 === member1.id ||
+                e.member2 === member1.id ||
+                e.member1 === member2.id ||
+                e.member2 === member2.id
+            );
+            if (already) {
+                return await interaction.reply({
+                    content: '既にエントリー済みのメンバーが含まれています',
+                    ephemeral: true
+                });
+            }
+
+            entries.push({
+                team,
+                submitter: interaction.user.id,
+                member1: member1.id,
+                member2: member2.id,
+                vcChannelId: null
+            });
+            saveEntries();
+
+            await Promise.all([
+                addRoleToUser(interaction.guild, member1.id),
+                addRoleToUser(interaction.guild, member2.id)
+            ]);
+
+            await interaction.reply({
+                content:
+`✅ 代理エントリー完了
+
+🏷️ チーム名: ${team}
+👤 メンバー①: <@${member1.id}>
+👤 メンバー②: <@${member2.id}>
+🎭 参加者ロール付与済み
+🕒 締切: ${ENTRY_DEADLINE}`
+            });
+        }
+
+        // 代理キャンセル（管理者のみ・/list の番号で指定）
+        else if (interaction.commandName === 'remove') {
+            if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+                return await interaction.reply({
+                    content: '⛔ このコマンドは管理者のみ使用できます',
+                    ephemeral: true
+                });
+            }
+
+            const number = interaction.options.getInteger('number');
+            const index = number - 1;
+            if (index < 0 || index >= entries.length) {
+                return await interaction.reply({
+                    content: `⛔ 番号 ${number} のエントリーは存在しません（/list で確認してください）`,
+                    ephemeral: true
+                });
+            }
+
+            const removed = entries.splice(index, 1)[0];
+            saveEntries();
+            await Promise.all([
+                removeRoleFromUser(interaction.guild, removed.member1),
+                removeRoleFromUser(interaction.guild, removed.member2)
+            ]);
+
+            await interaction.reply(`❌ ${number}. ${removed.team} を削除しました（ロール解除済み）`);
+        }
+
     } catch (e) {
         console.error('コマンド処理エラー:', e.message);
         if (!interaction.replied && !interaction.deferred) {
@@ -262,7 +351,31 @@ const commands = [
 
     new SlashCommandBuilder()
         .setName('cancel')
-        .setDescription('エントリー取消')
+        .setDescription('エントリー取消'),
+
+    new SlashCommandBuilder()
+        .setName('add')
+        .setDescription('代理エントリー（管理者のみ）')
+        .addStringOption(option =>
+            option.setName('team')
+                .setDescription('チーム名')
+                .setRequired(true))
+        .addUserOption(option =>
+            option.setName('member1')
+                .setDescription('メンバー①')
+                .setRequired(true))
+        .addUserOption(option =>
+            option.setName('member2')
+                .setDescription('メンバー②')
+                .setRequired(true)),
+
+    new SlashCommandBuilder()
+        .setName('remove')
+        .setDescription('代理キャンセル（管理者のみ・/list の番号で指定）')
+        .addIntegerOption(option =>
+            option.setName('number')
+                .setDescription('/list に表示される番号')
+                .setRequired(true))
 ].map(command => command.toJSON());
 
 const rest = new REST({ version: '10' }).setToken(TOKEN);
