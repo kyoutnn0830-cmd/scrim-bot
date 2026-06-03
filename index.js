@@ -130,6 +130,14 @@ client.on('interactionCreate', async interaction => {
             const member1 = interaction.options.getUser('member1');
             const member2 = interaction.options.getUser('member2');
 
+            // メンバー①と②が同一人物でないかチェック
+            if (member1.id === member2.id) {
+                return await interaction.reply({
+                    content: 'メンバー①とメンバー②は別の人を指定してください',
+                    ephemeral: true
+                });
+            }
+
             // メンバー①またはメンバー②がすでにエントリー済みかチェック
             const already = entries.find(e =>
                 e.member1 === interaction.user.id ||
@@ -247,6 +255,14 @@ client.on('interactionCreate', async interaction => {
             const team = interaction.options.getString('team');
             const member1 = interaction.options.getUser('member1');
             const member2 = interaction.options.getUser('member2');
+
+            // メンバー①と②が同一人物でないかチェック
+            if (member1.id === member2.id) {
+                return await interaction.reply({
+                    content: 'メンバー①とメンバー②は別の人を指定してください',
+                    ephemeral: true
+                });
+            }
 
             // すでにエントリー済みのメンバーが含まれていないかチェック
             const already = entries.find(e =>
