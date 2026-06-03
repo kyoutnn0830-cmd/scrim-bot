@@ -26,11 +26,6 @@ const client = new Client({
 
 const entries = [];
 
-// 自動作成VCの管理（チャンネルIDのSet）
-const autoVoiceChannels = new Set();
-// トリガーチャンネルID（/vc-setup で設定、または再起動後はenv参照）
-let triggerChannelId = process.env.VC_TRIGGER_CHANNEL_ID ?? null;
-
 // =====================
 // ユーティリティ
 // =====================
@@ -79,58 +74,6 @@ async function removeRoleFromUser(guild, userId) {
 
 client.once('clientReady', () => {
     console.log(`${client.user.tag} 起動`);
-    if (triggerChannelId) {
-        console.log(`トリガーVC: ${triggerChannelId}`);
-    } else {
-        console.log('トリガーVC未設定。/vc-setup を実行してください。');
-    }
-});
-
-// =====================
-// 自動VC作成・削除
-// =====================
-
-client.on('voiceStateUpdate', async (oldState, newState) => {
-    // トリガーVCに参加 → 新しいVCを作成して移動
-    if (newState.channelId === triggerChannelId && newState.member) {
-        try {
-            const member = newState.member;
-            const guild = newState.guild;
-            const triggerChannel = guild.channels.cache.get(triggerChannelId);
-
-            const newChannel = await guild.channels.create({
-                name: `🎮 ${member.displayName}のVC`,
-                type: ChannelType.GuildVoice,
-                parent: triggerChannel?.parentId ?? null,
-                permissionOverwrites: [
-                    {
-                        id: member.id,
-                        allow: [PermissionFlagsBits.ManageChannels]
-                    }
-                ]
-            });
-
-            autoVoiceChannels.add(newChannel.id);
-            await member.voice.setChannel(newChannel);
-            console.log(`VC作成: ${newChannel.name}`);
-        } catch (e) {
-            console.error('VC作成失敗:', e.message);
-        }
-    }
-
-    // 自動作成VCから全員退出 → 削除
-    if (oldState.channelId && autoVoiceChannels.has(oldState.channelId)) {
-        try {
-            const channel = oldState.guild.channels.cache.get(oldState.channelId);
-            if (channel && channel.members.size === 0) {
-                await channel.delete();
-                autoVoiceChannels.delete(oldState.channelId);
-                console.log(`VC削除: ${channel.name}`);
-            }
-        } catch (e) {
-            console.error('VC削除失敗:', e.message);
-        }
-    }
 });
 
 // =====================
@@ -257,44 +200,6 @@ client.on('interactionCreate', async interaction => {
             await interaction.reply('❌ エントリー削除 & ロール解除 & VC削除完了');
         }
 
-        // VC セットアップ（管理者のみ）
-        else if (interaction.commandName === 'vc-setup') {
-            if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-                return await interaction.reply({
-                    content: '⛔ このコマンドは管理者のみ使用できます',
-                    ephemeral: true
-                });
-            }
-
-            await interaction.deferReply({ ephemeral: true });
-
-            const guild = interaction.guild;
-
-            // 既存のトリガーVCがあれば削除
-            if (triggerChannelId) {
-                const existing = guild.channels.cache.get(triggerChannelId);
-                if (existing) await existing.delete().catch(() => {});
-            }
-
-            const channel = await guild.channels.create({
-                name: '➕ VCを作成',
-                type: ChannelType.GuildVoice
-            });
-
-            triggerChannelId = channel.id;
-            console.log(`トリガーVC作成: ${channel.id}`);
-
-            await interaction.editReply({
-                content:
-`✅ 自動VC作成チャンネルを設定しました
-
-📢 チャンネル: <#${channel.id}>
-🆔 チャンネルID: \`${channel.id}\`
-
-再起動後も維持するには、このIDを **VC_TRIGGER_CHANNEL_ID** としてシークレットに保存してください。`
-            });
-        }
-
     } catch (e) {
         console.error('コマンド処理エラー:', e.message);
         if (!interaction.replied && !interaction.deferred) {
@@ -330,11 +235,7 @@ const commands = [
 
     new SlashCommandBuilder()
         .setName('cancel')
-        .setDescription('エントリー取消'),
-
-    new SlashCommandBuilder()
-        .setName('vc-setup')
-        .setDescription('自動VC作成チャンネルをセットアップ（管理者のみ）')
+        .setDescription('エントリー取消')
 ].map(command => command.toJSON());
 
 const rest = new REST({ version: '10' }).setToken(TOKEN);
