@@ -178,13 +178,27 @@ client.on('interactionCreate', async interaction => {
                 });
             }
 
-            // チーム用VCを作成
+            // チーム用VCを作成（エントリーした2人だけが見える・入れる）
             let vcChannel = null;
             try {
                 vcChannel = await interaction.guild.channels.create({
                     name: `🏷️ ${team}`,
                     type: ChannelType.GuildVoice,
-                    parent: process.env.VC_CATEGORY_ID ?? null
+                    parent: process.env.VC_CATEGORY_ID ?? null,
+                    permissionOverwrites: [
+                        {
+                            id: interaction.guild.roles.everyone.id,
+                            deny: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect]
+                        },
+                        {
+                            id: member1.id,
+                            allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect]
+                        },
+                        {
+                            id: member2.id,
+                            allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect]
+                        }
+                    ]
                 });
             } catch (e) {
                 console.error('エントリーVC作成失敗:', e.message);
