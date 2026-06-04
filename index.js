@@ -53,6 +53,30 @@ function saveEntries() {
 
 const entries = loadEntries();
 
+// 手動締切の状態（管理者が /close で締切、/open で再開）
+const STATE_FILE = path.join(DATA_DIR, 'state.json');
+
+function loadState() {
+    try {
+        if (fs.existsSync(STATE_FILE)) {
+            return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+        }
+    } catch (e) {
+        console.error('状態読込失敗:', e.message);
+    }
+    return { manuallyClosed: false };
+}
+
+function saveState() {
+    try {
+        fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+    } catch (e) {
+        console.error('状態保存失敗:', e.message);
+    }
+}
+
+const state = loadState();
+
 // =====================
 // ユーティリティ
 // =====================
@@ -65,6 +89,11 @@ function isDeadlinePassed() {
     deadline.setMinutes(parseInt(minute));
     deadline.setSeconds(0);
     return now >= deadline;
+}
+
+// エントリーが締め切られているか（手動締切 または 22:00自動締切）
+function isEntryClosed() {
+    return state.manuallyClosed || isDeadlinePassed();
 }
 
 async function getRole(guild) {
@@ -124,9 +153,12 @@ client.on('interactionCreate', async interaction => {
     try {
         // エントリー
         if (interaction.commandName === 'entry') {
-            if (isDeadlinePassed()) {
+            if (isEntryClosed()) {
+                const reason = state.manuallyClosed
+                    ? '管理者により締め切られました'
+                    : `締切時刻（${ENTRY_DEADLINE}）を過ぎています`;
                 return await interaction.reply({
-                    content: `⛔ エントリーは締め切られました\n締切: ${ENTRY_DEADLINE}`,
+                    content: `⛔ エントリーは締め切られました\n理由: ${reason}`,
                     ephemeral: true
                 });
             }
@@ -360,6 +392,45 @@ client.on('interactionCreate', async interaction => {
             await interaction.reply(`❌ ${number}. ${removed.team} を削除しました（ロール解除済み）`);
         }
 
+        // 手動締切（管理者のみ）
+        else if (interaction.commandName === 'close') {
+            if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+                return await interaction.reply({
+                    content: '⛔ このコマンドは管理者のみ使用できます',
+                    ephemeral: true
+                });
+            }
+
+            if (state.manuallyClosed) {
+                return await interaction.reply({
+                    content: 'ℹ️ エントリーは既に締め切られています',
+                    ephemeral: true
+                });
+            }
+
+            state.manuallyClosed = true;
+            saveState();
+            await interaction.reply('🔒 エントリーを締め切りました（/open で再開できます）');
+        }
+
+        // 締切解除・再開（管理者のみ）
+        else if (interaction.commandName === 'open') {
+            if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+                return await interaction.reply({
+                    content: '⛔ このコマンドは管理者のみ使用できます',
+                    ephemeral: true
+                });
+            }
+
+            state.manuallyClosed = false;
+            saveState();
+
+            if (isDeadlinePassed()) {
+                return await interaction.reply(`🔓 手動締切を解除しました\n⚠️ ただし締切時刻（${ENTRY_DEADLINE}）を過ぎているため、まだエントリーはできません`);
+            }
+            await interaction.reply('🔓 エントリーを再開しました');
+        }
+
     } catch (e) {
         console.error('コマンド処理エラー:', e.message);
         if (!interaction.replied && !interaction.deferred) {
@@ -419,7 +490,15 @@ const commands = [
         .addIntegerOption(option =>
             option.setName('number')
                 .setDescription('/list に表示される番号')
-                .setRequired(true))
+                .setRequired(true)),
+
+    new SlashCommandBuilder()
+        .setName('close')
+        .setDescription('エントリーを締め切る（管理者のみ）'),
+
+    new SlashCommandBuilder()
+        .setName('open')
+        .setDescription('エントリーを再開する（管理者のみ）')
 ].map(command => command.toJSON());
 
 const rest = new REST({ version: '10' }).setToken(TOKEN);
