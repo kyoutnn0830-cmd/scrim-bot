@@ -418,6 +418,40 @@ client.on('interactionCreate', async interaction => {
             await interaction.reply('🔓 エントリーを再開しました');
         }
 
+        // 全リセット（管理者のみ）
+        else if (interaction.commandName === 'reset') {
+            if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+                return await interaction.reply({
+                    content: '⛔ このコマンドは管理者のみ使用できます',
+                    ephemeral: true
+                });
+            }
+
+            if (entries.length === 0) {
+                return await interaction.reply({
+                    content: 'ℹ️ エントリーはありません（リセット不要）',
+                    ephemeral: true
+                });
+            }
+
+            const count = entries.length;
+            // 全エントリーのメンバーIDを集めてロールを外す
+            const memberIds = new Set();
+            entries.forEach(e => {
+                memberIds.add(e.member1);
+                memberIds.add(e.member2);
+            });
+
+            entries.length = 0;
+            saveEntries();
+
+            await Promise.all(
+                [...memberIds].map(id => removeRoleFromUser(interaction.guild, id))
+            );
+
+            await interaction.reply(`🗑️ エントリーを全てリセットしました（${count}チーム削除・ロール解除済み）`);
+        }
+
     } catch (e) {
         console.error('コマンド処理エラー:', e.message);
         if (!interaction.replied && !interaction.deferred) {
@@ -485,7 +519,11 @@ const commands = [
 
     new SlashCommandBuilder()
         .setName('open')
-        .setDescription('エントリーを再開する（管理者のみ）')
+        .setDescription('エントリーを再開する（管理者のみ）'),
+
+    new SlashCommandBuilder()
+        .setName('reset')
+        .setDescription('エントリー情報を全て消去する（管理者のみ）')
 ].map(command => command.toJSON());
 
 const rest = new REST({ version: '10' }).setToken(TOKEN);
