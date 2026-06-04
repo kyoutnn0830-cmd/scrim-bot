@@ -18,7 +18,6 @@ const ENTRY_ROLE_ID = process.env.ENTRY_ROLE_ID;
 // エントリーに必須のロール（メンバー①②が両方持っている必要がある）
 const REQUIRED_ROLE_ID = process.env.REQUIRED_ROLE_ID || '1444402009058054144';
 
-const ENTRY_DEADLINE = "22:00";
 const ENTRY_LIMIT = 100; // エントリー人数上限（メンバー①+メンバー②=2人/チーム）
 
 const client = new Client({
@@ -81,19 +80,9 @@ const state = loadState();
 // ユーティリティ
 // =====================
 
-function isDeadlinePassed() {
-    const now = new Date();
-    const [hour, minute] = ENTRY_DEADLINE.split(":");
-    const deadline = new Date();
-    deadline.setHours(parseInt(hour));
-    deadline.setMinutes(parseInt(minute));
-    deadline.setSeconds(0);
-    return now >= deadline;
-}
-
-// エントリーが締め切られているか（手動締切 または 22:00自動締切）
+// エントリーが締め切られているか（管理者による手動締切のみ）
 function isEntryClosed() {
-    return state.manuallyClosed || isDeadlinePassed();
+    return state.manuallyClosed;
 }
 
 async function getRole(guild) {
@@ -154,11 +143,8 @@ client.on('interactionCreate', async interaction => {
         // エントリー
         if (interaction.commandName === 'entry') {
             if (isEntryClosed()) {
-                const reason = state.manuallyClosed
-                    ? '管理者により締め切られました'
-                    : `締切時刻（${ENTRY_DEADLINE}）を過ぎています`;
                 return await interaction.reply({
-                    content: `⛔ エントリーは締め切られました\n理由: ${reason}`,
+                    content: '⛔ エントリーは締め切られました（管理者により締め切られています）',
                     ephemeral: true
                 });
             }
@@ -236,8 +222,7 @@ client.on('interactionCreate', async interaction => {
 🏷️ チーム名: ${team}
 👤 メンバー①: <@${member1.id}>
 👤 メンバー②: <@${member2.id}>
-🎭 参加者ロール付与済み
-🕒 締切: ${ENTRY_DEADLINE}`
+🎭 参加者ロール付与済み`
             });
         }
 
@@ -359,8 +344,7 @@ client.on('interactionCreate', async interaction => {
 🏷️ チーム名: ${team}
 👤 メンバー①: <@${member1.id}>
 👤 メンバー②: <@${member2.id}>
-🎭 参加者ロール付与済み
-🕒 締切: ${ENTRY_DEADLINE}`
+🎭 参加者ロール付与済み`
             });
         }
 
@@ -422,12 +406,15 @@ client.on('interactionCreate', async interaction => {
                 });
             }
 
+            if (!state.manuallyClosed) {
+                return await interaction.reply({
+                    content: 'ℹ️ エントリーは現在受付中です',
+                    ephemeral: true
+                });
+            }
+
             state.manuallyClosed = false;
             saveState();
-
-            if (isDeadlinePassed()) {
-                return await interaction.reply(`🔓 手動締切を解除しました\n⚠️ ただし締切時刻（${ENTRY_DEADLINE}）を過ぎているため、まだエントリーはできません`);
-            }
             await interaction.reply('🔓 エントリーを再開しました');
         }
 
