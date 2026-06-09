@@ -233,17 +233,32 @@ client.on('interactionCreate', async interaction => {
             }
 
             const total = entries.length * 2;
+
+            const getName = async (id) => {
+                try {
+                    const m = await interaction.guild.members.fetch(id);
+                    return m.displayName;
+                } catch {
+                    return '不明なユーザー';
+                }
+            };
+
             let text = `## エントリー一覧　${total} / ${ENTRY_LIMIT}人\n\n`;
-            entries.forEach((e, i) => {
+            for (let i = 0; i < entries.length; i++) {
+                const e = entries[i];
+                const [name1, name2] = await Promise.all([
+                    getName(e.member1),
+                    getName(e.member2)
+                ]);
                 text +=
 `${i + 1}. ${e.team}
-👤 <@${e.member1}>
-👤 <@${e.member2}>
+👤 ${name1}
+👤 ${name2}
 
 `;
-            });
+            }
 
-            await interaction.reply(text);
+            await interaction.reply({ content: text, allowedMentions: { parse: [] } });
         }
 
         // キャンセル（エントリーした本人またはメンバーが実行可能）
